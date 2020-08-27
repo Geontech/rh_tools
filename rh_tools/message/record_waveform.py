@@ -23,6 +23,7 @@ Example JSON file.  This module is only looking for message out ports.
 """
 from ossie.utils import redhawk, sb
 from ossie.events import Subscriber, Publisher
+from rh_tools.domain.domain_tools import find_waveform
 import uuid
 import sys
 if sys.version_info.major == 2:
@@ -30,34 +31,7 @@ if sys.version_info.major == 2:
 else:
     prompt = input
 
-def find_waveform(waveforms, name):
-    """Find a waveform by name
 
-    Scans through the list of waveforms to find one
-    with the matching name.  The Waveforms will have
-    a unique number attached, so this just finds the
-    first instance that matches.
-
-    Parameters
-    ----------
-    waveforms : list
-        List of waveforms, typically from accessing
-        applications on the domain.
-
-    name : str
-        Name of the waveform
-
-    Returns
-    -------
-    output : waveform (ossie.cf.CF._objref_Applicaiton) or None
-        If no match, return None
-        If match return the first instance in waveforms that
-        matches
-    """
-    for wvfm in waveforms:
-        if name in wvfm.name:
-            return wvfm
-    return None
 
 def listen_waveform_ports(domain, waveform_ports):
     """Listen to message events on specific waveform ports on domain
