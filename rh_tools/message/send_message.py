@@ -3,7 +3,7 @@ from ossie.events import Subscriber, Publisher
 from rh_tools.domain.domain_tools import find_waveform_from_domain
 import uuid
 
-def send_message(msg, wvfm, port_name, domain="REDHAWK_DEV"):
+def send_message(msg, wvfm, port_name, domain="REDHAWK_DEV", msg_id="default"):
     """Connect to waveform message in port and send message
 
     1. Connects to a domain.
@@ -23,11 +23,16 @@ def send_message(msg, wvfm, port_name, domain="REDHAWK_DEV"):
 
     domain : str
         Name of the domain to attach and search for the waveform.
+
+    msg_id : str
+        The id of the message.
     """
     wvfm = find_waveform_from_domain(domain, wvfm)
     if wvfm:
         port = wvfm.getPort(port_name)
-        msg_src = sb.MessageSource()
+        msg_src = sb.MessageSource(msg_id)
+        msg_port = msg_src.getPort("msgOut")
+        #msg_port.connectPort(port, "conn_" + str(uuid.uuid1()))
         msg_src.connectPort(port, "conn_" + str(uuid.uuid1()))
         msg_src.start()
         msg_src.sendMessage(msg)
@@ -53,6 +58,7 @@ def publish_to_event_channel(msg, event_channel, domain="REDHAWK_DEV"):
     try:
         dom = redhawk.attach(domain)
         pub = Publisher(dom, event_channel)
+
         pub.push(msg)
     except:
         raise
@@ -69,12 +75,14 @@ if __name__ == "__main__":
     parser.add_argument("--port", default="", help="Name of port on waveform")
     parser.add_argument("--evt_chan", default="",
         help="Event channel to publish")
+    parser.add_argument("--msg_id", default="def_msg",
+        help="The id of the message")
     args = parser.parse_args()
 
     # load message from json
     # NOTE: using yaml to avoid utf strings
     msg = yaml.safe_load(open(args.json, "r"))
-    import pdb; pdb.set_trace()
+
     if args.evt_chan:
         print("Publish to event channel %s"%args.evt_chan)
         publish_to_event_channel(msg, args.evt_chan, args.domain)
@@ -82,4 +90,4 @@ if __name__ == "__main__":
     if args.waveform and args.port:
         print("Push message to specified waveform/port")
         send_message(msg, wvfm=args.waveform, port_name=args.port,
-            domain=args.domain)
+            domain=args.domain, msg_id=args.msg_id)

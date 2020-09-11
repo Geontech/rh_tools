@@ -1,5 +1,5 @@
 from ossie.utils import redhawk
-def find_event_channelfrom_domain(domain, name):
+def find_event_channel_from_domain(domain, name):
     try:
         dom = redhawk.attach(domain)
         for evt in dom.eventChannels:

@@ -1,12 +1,8 @@
 #!/usr/bin/env python
 """
-This module is intended to help provide recordings of messages
+This module is intended to help provide recordings of bulkio streams
 passed between waveforms.  A JSON configuration file is passed
 in to describe the domain, waveform/ports to listen to.
-
-The recorded messages are stored in a dictionary with the
-waveform:port name as the keys.  This is serialized into a
-pickle file for further analysis.
 
 Notes
 -----
@@ -15,11 +11,17 @@ Example JSON file.  This module is only looking for message out ports.
 {
     "domain":"REDHAWK_DEV",
     "ports":[
-        ["Waveform1", "port_a"],
-        ["Waveform1", "port_b"],
-        ["Waveform2", "port_c"]
+        ["Waveform1", "port_a", "floatIn", "/tmp/out1.bin"],
+        ["Waveform1", "port_b", "octetIn", "/tmp/out2.bin"],
+        ["Waveform2", "port_c", "shortIn", "/tmp/out3.bin"]
     ]
 }
+
+In this example, waveform1 and waveform2 are on the REDHAWK_DEV
+domain.  The third parameter of ports ("*In") describes the type
+of port and is the name of the input port of the file sink to
+connect.  Finally, the last element of each port is the file to
+store in.  Currently the files are stored as bluefiles.
 """
 from ossie.utils import redhawk, sb
 from rh_tools.domain.domain_tools import find_waveform
@@ -29,8 +31,6 @@ if sys.version_info.major == 2:
     prompt = raw_input
 else:
     prompt = input
-
-
 
 def listen_waveform_ports(domain, waveform_ports):
     """Listen to message events on specific waveform ports on domain
@@ -42,7 +42,9 @@ def listen_waveform_ports(domain, waveform_ports):
 
     waveform_ports : list of tuples
         This will be a list of ports.  Each tuple is a combination of
-        (WAVEFORM_NAME, PORT_NAME)
+        (WAVEFORM_NAME, PORT_NAME, PORT_DATA_TYPE OUTPUT_FILE)
+        PORT_DATA_TYPE should match an input port of the sb.FileSink
+        {"floatIn", "shortIn", "octetIn"}
 
     Returns
     -------
@@ -55,14 +57,15 @@ def listen_waveform_ports(domain, waveform_ports):
     waveforms = dom.applications
 
     # ------------------------  prepare variables  --------------------------
-    my_msg_sinks = {}
-    my_msgs = {}
+    my_sink_list = {}
 
     # add a message sink per port
-    for (c_name, c_port) in waveform_ports:
+    for (c_name, c_port, c_type, c_file) in waveform_ports:
         # enforce strings
         c_name = str(c_name)
         c_port = str(c_port)
+        c_type = str(c_type)
+        c_file = str(c_file)
 
         print("Name = %s, Port = %s"%(str(c_name), str(c_port)))
 
@@ -74,49 +77,39 @@ def listen_waveform_ports(domain, waveform_ports):
             port_inst = c_wave.getPort(c_port)
 
             # ---------------  connect to message sink  ---------------------
-            msg_sink = sb.MessageSink(storeMessages=True)
+            f_sink = sb.FileSink(filename=c_file, midasFile=True)
             port_inst.connectPort(\
-                msg_sink.getPort("msgIn"),
+                f_sink.getPort(c_type),
                 "conn_"+ str(uuid.uuid1()))
-            msg_sink.start()
+            f_sink.start()
 
             # track sink
             key = c_name + ":" + c_port
-            my_msg_sinks[key] = msg_sink
+            my_sink_list[key] = f_sink
         except:
             print("Failed to connect to port:\t%s:%s"%(c_name, c_port))
 
     # -----------------------  user prompt to end  --------------------------
-    if len(my_msg_sinks) > 0:
+    if len(my_sink_list) > 0:
         prompt("Hit enter to end...")
     else:
         print("No connections set...exiting")
 
-    # --------------------------  get messages  -----------------------------
-    for key in my_msg_sinks.keys():
-        my_msgs[key] = my_msg_sinks[key].getMessages()
+    # --------------------------  stop and release  -------------------------
+    for key in my_sink_list.keys():
         try:
-            my_msg_sinks[key].releaseObject()
+            my_sink_list[key].stop()
+            my_sink_list[key].releaseObject()
         except Exception as e:
-            print("Failed to release msg sink: %s"%str(e))
-    return my_msgs
+            print("Failed to release sink: %s"%str(e))
+
 
 if __name__ == "__main__":
     # --------------------  parse command-line arguments  -------------------
     from argparse import ArgumentParser
     import json
-    description = \
-        """
-        Expecting a JSON config file to store a dictionary with a
-        "domain" field specifying the str name of the domain.
-
-        And a "ports" fields specifying the list of tuples
-        (waveform_name, msg_output_port_name)\n
-        """
-    parser = ArgumentParser(description=description)
+    parser = ArgumentParser(description=__doc__)
     parser.add_argument("json", help="JSon specification")
-    parser.add_argument("--output", default="/tmp/recorded_messages.pickle",
-        help="output file to save messages")
     args = parser.parse_args()
 
     # -----------------------  begin processing  ----------------------------
@@ -128,9 +121,4 @@ if __name__ == "__main__":
         assert specs.get("ports") is not None, "Expecting a ports field"
 
         # listen to messages
-        msgs = listen_waveform_ports(specs["domain"], specs["ports"])
-
-        # record message to file for further analysis
-        if msgs and args.output:
-            import pickle
-            pickle.dump(msgs, open(args.output, "w"))
+        listen_waveform_ports(specs["domain"], specs["ports"])

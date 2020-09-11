@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 from setuptools import setup, find_packages
 name = "Redhawk Tools"
-version = "0.1"
-release = "0.1"
+version = "0.2"
+release = "0.2"
 author = "Keith Chow"
 
 setup(
@@ -12,7 +12,7 @@ setup(
     author_email = "kchow@geontech.com",
     description = "Tools to help develop and analyze Redhawk development",
     packages = find_packages(),
-    install_requires = ["numpy", "matplotlib", "scipy"],
+    install_requires = ["numpy", "matplotlib", "pyyaml", "scipy"],
         # "sphinxcontrib.napoleon"],
     command_options = {
         "build_sphinx" : {
