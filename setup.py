@@ -12,8 +12,10 @@ setup(
     author_email = "kchow@geontech.com",
     description = "Tools to help develop and analyze Redhawk development",
     packages = find_packages(),
-    install_requires = ["numpy", "matplotlib", "pyyaml", "scipy"],
+    install_requires = ["numpy", "matplotlib", "pyyaml", "scipy",
+        "pytest-runner"],
         # "sphinxcontrib.napoleon"],
+    tests_require=["pytest"],
     command_options = {
         "build_sphinx" : {
             "project": ("setup.py", name),
