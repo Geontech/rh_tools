@@ -25,12 +25,11 @@ from ossie.utils import redhawk, sb
 from rh_tools.domain.domain_tools import find_waveform
 import uuid
 import sys
+import time
 if sys.version_info.major == 2:
     prompt = raw_input
 else:
     prompt = input
-
-
 
 def listen_waveform_ports(domain, waveform_ports):
     """Listen to message events on specific waveform ports on domain
@@ -50,45 +49,59 @@ def listen_waveform_ports(domain, waveform_ports):
         Dictionary where keys is the combo of waveform + port name
         The value will be the recorded messages.
     """
-    # --------------  connect and get list of waveforms  --------------------
+    # --------------  connect  ----------------------------------------------
     dom = redhawk.attach(domain)
-    waveforms = dom.applications
 
     # ------------------------  prepare variables  --------------------------
     my_msg_sinks = {}
     my_msgs = {}
+    waveform_ports_connected = 0
+    print_decimation = 0
+    PRINT_EVERY_NTH_LOOP = 20
 
-    # add a message sink per port
-    for (c_name, c_port) in waveform_ports:
-        # enforce strings
-        c_name = str(c_name)
-        c_port = str(c_port)
+    while waveform_ports_connected < len(waveform_ports):
+        if print_decimation == 0:
+            print("Connecting ports ({} of {} complete) ...".format(waveform_ports_connected, len(waveform_ports)))
+        print_decimation = (print_decimation + 1) % PRINT_EVERY_NTH_LOOP
 
-        print("Name = %s, Port = %s"%(str(c_name), str(c_port)))
+        # --------------  get applications  ---------------------------------
+        waveforms = dom.applications
 
-        # select waveform from the list
-        c_wave = find_waveform(waveforms, c_name)
+        # add a message sink per port
+        for (c_name, c_port) in waveform_ports:
+            # enforce strings
+            c_name = str(c_name)
+            c_port = str(c_port)
+            waveform_port_key = c_name + ":" + c_port
 
-        try:
-            # get the port of interest
-            port_inst = c_wave.getPort(c_port)
+            if not waveform_port_key in my_msg_sinks:
+                # select waveform from the list
+                c_wave = find_waveform(waveforms, c_name)
 
-            # ---------------  connect to message sink  ---------------------
-            msg_sink = sb.MessageSink(storeMessages=True)
-            port_inst.connectPort(\
-                msg_sink.getPort("msgIn"),
-                "conn_"+ str(uuid.uuid1()))
-            msg_sink.start()
+                try:
+                    # get the port of interest
+                    port_inst = c_wave.getPort(c_port)
 
-            # track sink
-            key = c_name + ":" + c_port
-            my_msg_sinks[key] = msg_sink
-        except:
-            print("Failed to connect to port:\t%s:%s"%(c_name, c_port))
+                    # ---------------  connect to message sink  ---------------------
+                    msg_sink = sb.MessageSink(storeMessages=True)
+                    port_inst.connectPort(\
+                        msg_sink.getPort("msgIn"),
+                        "conn_"+ str(uuid.uuid1()))
+                    msg_sink.start()
+
+                    # track sink
+                    my_msg_sinks[waveform_port_key] = msg_sink
+                    print("Connected Waveform Name = {}, Port Name = {}".format(str(c_name), str(c_port)))
+                    waveform_ports_connected = waveform_ports_connected + 1
+                except:
+                    pass
+
+        # Wait for a tenth of a second before trying again
+        time.sleep(0.1)
 
     # -----------------------  user prompt to end  --------------------------
     if len(my_msg_sinks) > 0:
-        prompt("Hit enter to end...")
+        prompt("Hit enter when you are finished recording messages ...")
     else:
         print("No connections set...exiting")
 
@@ -115,8 +128,8 @@ if __name__ == "__main__":
         """
     parser = ArgumentParser(description=description)
     parser.add_argument("json", help="JSon specification")
-    parser.add_argument("--output", default="/tmp/recorded_messages.pickle",
-        help="output file to save messages")
+    parser.add_argument("--output", default="/tmp/recorded_messages.json", help="output file to save messages")
+    parser.add_argument("--pickle", action="store_true", help="Output the data in pickle format instead of json")
     args = parser.parse_args()
 
     # -----------------------  begin processing  ----------------------------
@@ -132,5 +145,8 @@ if __name__ == "__main__":
 
         # record message to file for further analysis
         if msgs and args.output:
-            import pickle
-            pickle.dump(msgs, open(args.output, "w"))
+            if args.pickle:
+                import pickle
+                pickle.dump(msgs, open(args.output, "w"))
+            else:
+                json.dump(msgs, open(args.output, "w"), indent=2)
