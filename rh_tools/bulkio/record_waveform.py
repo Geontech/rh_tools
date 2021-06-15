@@ -4,18 +4,18 @@ This module is intended to help provide recordings of bulkio streams
 passed between waveforms.  A JSON configuration file is passed
 in to describe the domain, waveform/ports to listen to.
 
-Notes
------
+Example
+-------
 Example JSON file.  This module is only looking for message out ports.
 
-{
-    "domain":"REDHAWK_DEV",
-    "ports":[
-        ["Waveform1", "port_a", "floatIn", "/tmp/out1.bin"],
-        ["Waveform1", "port_b", "octetIn", "/tmp/out2.bin"],
-        ["Waveform2", "port_c", "shortIn", "/tmp/out3.bin"]
-    ]
-}
+>>> {
+>>>     "domain":"REDHAWK_DEV",
+>>>     "ports":[
+>>>         ["Waveform1", "port_a", "floatIn", "/tmp/out1.bin"],
+>>>         ["Waveform1", "port_b", "octetIn", "/tmp/out2.bin"],
+>>>         ["Waveform2", "port_c", "shortIn", "/tmp/out3.bin"]
+>>>     ]
+>>> }
 
 In this example, waveform1 and waveform2 are on the REDHAWK_DEV
 domain.  The third parameter of ports ("*In") describes the type

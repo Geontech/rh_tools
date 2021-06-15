@@ -12,15 +12,18 @@ The configuration file will be JSON with the fields
 * port (port of the waveform to forward)
 * msg_id (ID of the messages expected)
 
-Example JSON
-------------
-{
-    "domain":"REDHAWK_DEV",
-    "event_channel":"event_channel",
-    "waveform":"my_waveform",
-    "port":"message_in",
-    "msg_id":"message_id"
-}
+Example
+-------
+Specify the event channel to listen and forward messages to the
+specified waveform port on the given domain
+
+>>> {
+>>>     "domain":"REDHAWK_DEV",
+>>>     "event_channel":"event_channel",
+>>>     "waveform":"my_waveform",
+>>>     "port":"message_in",
+>>>     "msg_id":"message_id"
+>>> }
 """
 from ossie.utils import redhawk, sb
 from ossie.events import Subscriber, Publisher

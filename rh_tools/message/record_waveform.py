@@ -8,18 +8,18 @@ The recorded messages are stored in a dictionary with the
 waveform:port name as the keys.  This is serialized into a
 pickle file for further analysis.
 
-Notes
------
+Example
+-------
 Example JSON file.  This module is only looking for message out ports.
 
-{
-    "domain":"REDHAWK_DEV",
-    "ports":[
-        ["Waveform1", "port_a"],
-        ["Waveform1", "port_b"],
-        ["Waveform2", "port_c"]
-    ]
-}
+>>> {
+>>>     "domain":"REDHAWK_DEV",
+>>>     "ports":[
+>>>         ["Waveform1", "port_a"],
+>>>         ["Waveform1", "port_b"],
+>>>         ["Waveform2", "port_c"]
+>>>     ]
+>>> }
 """
 from ossie.utils import redhawk, sb
 from rh_tools.domain.domain_tools import find_waveform

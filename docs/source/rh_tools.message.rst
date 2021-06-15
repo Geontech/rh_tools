@@ -17,14 +17,6 @@ message Package
     :undoc-members:
     :show-inheritance:
 
-:mod:`record_waveform2` Module
-------------------------------
-
-.. automodule:: rh_tools.message.record_waveform2
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
 :mod:`send_message` Module
 --------------------------
 
