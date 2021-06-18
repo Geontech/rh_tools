@@ -46,9 +46,7 @@ This module uses a JSON file to specify a message structure.  The message is eit
 
 ### run_custom
 
-This uses JSON specification to denote the scene in terms of components and connections.
-
-<span style="color:red">06/15/2021: Currently only support components</span>
+This uses JSON specification to denote the scene in terms of components, waveforms and connections.
 
 #### Debug
 
@@ -58,3 +56,14 @@ Debug options are available to identify common things of interest at a given por
 | --- | --- |
 | Throughput | Measure the element per second out for a given port |
 | Message Sink | Identify the messages out of a given port |
+
+Message Sink can be in the following format.  In addition to displaying at runtime, the messages will be saved to the "output_file.json" in the "json" format.  "pickle" is also supported
+
+~~~json
+["SourceID", "port", "output_file.json", "json"]
+~~~
+
+~~~bash
+# convert json to CSV for ease of reviewing in a spreadsheet software
+$ python -m rh_tools.scene.message_helper output_file.json output_file.csv --format json
+~~~

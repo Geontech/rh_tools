@@ -4,8 +4,6 @@
 This module supports loading in a scenario in the Redhawk sandbox,
 loading components and setting up connections.
 
-.. note:: Currently only support loading components.
-
 Example
 --------
 JSON Format:
@@ -42,12 +40,18 @@ JSON Format:
 >>>     }
 >>> }
 """
-from ossie.utils import sb
+from ossie.utils import sb, redhawk
 import json
 from collections import OrderedDict
 import time
 import sys
+import uuid
 from pprint import pprint
+from rh_tools.scene.utils import convert_dict
+from rh_tools.scene import component_helper
+from rh_tools.scene import waveform_helper
+from rh_tools.scene import message_helper
+
 if sys.version_info.major == "2":
     # Python2 user prompt
     user_prompt = raw_input
@@ -56,63 +60,34 @@ else:
     user_prompt = input
 TIME_INC = 1 # 1 sec updates
 
-def convert_dict(my_dict):
-    """Convert dictionary from json load.
-
-    Corrects a dictionary from json load, where strings are
-    in the unicode format.  This function will recursively
-    parse a dictionary to convert unicode to string.
-
+def setup_domains(domain_dict):
+    """
     Parameters
     ----------
-    my_dict : dict
-        A dictionary loaded from json.
-
-    Returns
-    -------
-    out_dict : dict
-        Output should convert both keys and values that are
-        unicode over to str.
+    domain_dict : dict
+        Dictionary of domain specs.  The key will be the domain name.
+        The supported fields include:
+            devices_managers : list
     """
-    # --------------------------  error checking  ---------------------------
-    assert isinstance(my_dict, dict), "Expecting dict"
+    active_domains = redhawk.scan()
+    for domain in domain_dict:
+        if domain in active_domains:
+            # TODO: check if device managers have been loaded
+            pass
+        else:
+            # extract potential list of device managers
+            dev_mgr = domain_dict[domain].get("device_managers", [])
 
-    # convert
-    out = OrderedDict()
-    for key in my_dict:
-        # get current value
-        c_val = my_dict[key]
-
-        # do necessary conversions
-        if isinstance(c_val, unicode):
-            c_val = str(c_val)
-        elif isinstance(c_val, dict):
-            c_val = convert_dict(c_val)
-
-        out[str(key)] = c_val
-    return out
-
-def start_in_reverse_order(my_comps):
-    """Start the ordered list of components in reversed order
-
-    Assuming the user sets up the scenario from a source -> sink,
-    this function will start all component, but from the last component
-    first, and the first component last.  Thus sinks will start prior
-    to the sources.
-
-    Parameters
-    ----------
-    my_comps : OrderedDict
-        The list of components in the scenario.
-    """
-    my_list = my_comps.items()
-    for ind in range(len(my_comps) - 1, -1, -1):
-        my_list[ind][1].start()
+            # kick start domain
+            if dev_mgr:
+                dom = redhawk.kickDomain(domain, device_managers=dev_mgr)
+            else:
+                dom = redhawk.kickDomain(domain, kick_device_managers=False)
 
 def load_and_run_scenario(json_file, time_inc=1, wfm=""):
     """Load a scenario and run
 
-    .. warn:: Support for generating waveform not implemented yet.
+    .. warn:: Excess use of DEBUG can impact performance
 
     Parameters
     ----------
@@ -130,61 +105,47 @@ def load_and_run_scenario(json_file, time_inc=1, wfm=""):
     """
     if isinstance(json_file, str):
         settings = json.load(open(json_file), encoding='ascii')
+        settings = convert_dict(settings)
     elif isinstance(json_file, dict):
         settings = json_file
     else:
         raise ValueError("Expecting a string json filepath or dict")
 
     # extract from dictionary (verify keys exist)
-    comps = settings.get("components", {})
-    waves = settings.get("waveforms", {})
+    comp_specs = settings.get("components", {})
+    wave_specs = settings.get("waveforms", {})
+    domain_specs = settings.get("domains", [])
     conns = settings["connections"]
     simm = settings["simulation"]
     debug = settings.get("debug", {})
-    msg_sinks = OrderedDict()
+
+    if domain_specs:
+        setup_domains(domain_specs)
 
     # ---------------------------  load components  -------------------------
-    comp_dict = OrderedDict()
-    for comp in comps:
-        c_comp = comps[comp]
-        # launch component
-        comp_dict[comp] = sb.launch(c_comp["key"])
-
-        # -------------------------  configure  -----------------------------
-        # FIXME : potentially may want to control the order of this.
-        # remove unicode
-        new_dict = convert_dict(c_comp["val"])
-        comp_dict[comp].configure(new_dict)
-
-        # ------------------ if log level specified, update  ----------------
-        log_lvl = c_comp.get("log")
-        if log_lvl:
-            comp_dict[comp].log.setLevel(log_lvl)
-
-    for msink in debug.get("message_sink", []):
-        # initialize msg sinks
-        new_key = "(%s)_(%s)"%(str(msink[0]), str(msink[1]))
-        msg_sinks[new_key] = sb.MessageSink(storeMessages=True)
-
-        # connect component output to msg sink
-        comp_dict[str(msink[0])].connect(msg_sinks[new_key],
-            usesPortName=str(msink[1]))
+    comp_dict = component_helper.launch_components(sb, comp_specs)
 
     # --------------------------  load waveforms  ---------------------------
-    # TODO: don't know how to launch from sb
+    wfm_dict = waveform_helper.launch_waveforms(wave_specs)
+
+    # ----------------------  connect message sinks  ------------------------
+    msg_sinks, msg_store = message_helper.connect_msg_sinks(
+        sb, comp_dict, wfm_dict, debug)
 
     # -------------------------  setup connections  -------------------------
     for conn in conns:
-        # NOTE: order is [comp1, port1, comp2, port2]
-        comp_1 = comp_dict[conn[0]]
-        comp_2 = comp_dict[conn[2]]
-        port_1 = conn[1]
-        port_2 = conn[3]
+        try:
 
-        # ------------------------  connect  --------------------------------
-        # FIXME: this works for component may differ if supporting waveforms
-        comp_1.connect(comp_2, usesPortName=port_1, providesPortName=port_2)
-
+            obj_1 = get_instance(conn[0], comp_dict, wfm_dict)
+            port_1 = obj_1.getPort(str(conn[1]))
+            obj_2 = get_instance(conn[2], comp_dict, wfm_dict)
+            port_2 = obj_2.getPort(str(conn[3]))
+            port_1.connectPort(port_2,
+                "conn_%s_to_%s_"%(str(conn[0]), str(conn[2]))\
+                + str(uuid.uuid1()))
+        except Exception as e:
+            print("Error running connection %s"%str(conn))
+            raise
     # ---------------------------  setup debug  ---------------------------
     try:
         throughput_ports = {}
@@ -208,51 +169,47 @@ def load_and_run_scenario(json_file, time_inc=1, wfm=""):
     # --------------------------  run simulation  ---------------------------
     if simm["type"].lower() in ["time"]:
         print("In time simulation")
-        start_in_reverse_order(comp_dict)
+        waveform_helper.start_waveforms(wfm_dict)
+        component_helper.start_in_reverse_order(comp_dict)
 
         tic = time.time()
         while time.time() - tic < simm["value"]["duration"]:
             # show message being passed
-            show_messages(msg_sinks)
+            message_helper.show_messages(msg_sinks, msg_store)
 
             # show port throughput statistics
             show_throughput(throughput_ports)
 
             # sleep a little
             time.sleep(time_inc)
-        sb.stop()
+
+        component_helper.stop_in_order(comp_dict)
+        waveform_helper.stop_waveforms(wfm_dict)
+        #sb.stop()
 
     elif simm["type"].lower() in ["user"]:
         # run till user hits enter
         sb.start()
         resp = user_prompt("Hit enter to exit")
         sb.stop()
-    elif simm["type"].lower() in ["data"]:
-    	# NOTE: the number of samples is specified in the "head" component
-        # TODO: assert that a head component is in components
-        raise NotImplementedError("No setup for running on fixed data out")
+
     else:
         raise RuntimeError("Unexpected type of simulation")
 
-def show_messages(message_sinks):
-    """Show messages received at a given port
+    # save messages
+    if msg_store:
+        message_helper.save_messages(msg_store)
 
-    Parameters
-    ----------
-    message_sinks : dict
-        Dictionary where key is a function of the input comp and port
-        The value is the message received.
-    """
-    for key in message_sinks.keys():
+    # TODO: release components/waveforms/devices/domains
+    waveform_helper.release_waveforms(wfm_dict)
 
-        # get the current message sink
-        m_sink = message_sinks[key]
-
-        # print out the message received on the sink
-        msgs = m_sink.getMessages()
-        if msgs:
-            print("=" * 30 + "\nFrom %s\n"%key + "="*30)
-            pprint(msgs)
+def get_instance(unique_id, comp_dict, wfm_dict):
+    if unique_id in comp_dict:
+        return comp_dict[unique_id]
+    elif unique_id in wfm_dict:
+        return wfm_dict[unique_id]
+    else:
+        return None
 
 def show_throughput(ports):
     """Display throughput at specified ports

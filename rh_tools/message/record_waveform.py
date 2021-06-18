@@ -128,8 +128,10 @@ if __name__ == "__main__":
         """
     parser = ArgumentParser(description=description)
     parser.add_argument("json", help="JSon specification")
-    parser.add_argument("--output", default="/tmp/recorded_messages.json", help="output file to save messages")
-    parser.add_argument("--pickle", action="store_true", help="Output the data in pickle format instead of json")
+    parser.add_argument("--output", default="/tmp/recorded_messages.json",
+        help="output file to save messages")
+    parser.add_argument("--pickle", action="store_true",
+        help="Output the data in pickle format instead of json")
     args = parser.parse_args()
 
     # -----------------------  begin processing  ----------------------------
