@@ -47,11 +47,13 @@ import time
 import sys
 import uuid
 from pprint import pprint
-from rh_tools.scene.utils import convert_dict
+import time
+import warnings
+from rh_tools.scene.utils import convert_dict, get_instance
 from rh_tools.scene import component_helper
 from rh_tools.scene import waveform_helper
 from rh_tools.scene import message_helper
-
+from rh_tools.scene import throughput_helper
 if sys.version_info.major == "2":
     # Python2 user prompt
     user_prompt = raw_input
@@ -60,8 +62,15 @@ else:
     user_prompt = input
 TIME_INC = 1 # 1 sec updates
 
-def setup_domains(domain_dict):
-    """
+def setup_domains(domain_dict, delay=5):
+    """Setup domains specified
+
+    Attempts to attach or kick start a list of domains with the
+    specified device managers.
+
+    .. warning:: Currently does not support launching device managers
+        when attaching to a domain
+
     Parameters
     ----------
     domain_dict : dict
@@ -70,24 +79,39 @@ def setup_domains(domain_dict):
             devices_managers : list
     """
     active_domains = redhawk.scan()
-    for domain in domain_dict:
-        if domain in active_domains:
-            # TODO: check if device managers have been loaded
-            pass
-        else:
-            # extract potential list of device managers
-            dev_mgr = domain_dict[domain].get("device_managers", [])
 
+    for domain in domain_dict:
+        # extract potential list of device managers
+        dev_mgrs = domain_dict[domain].get("device_managers", [])
+
+        # -----------------------  setup domain instance  -------------------
+        if domain in active_domains:
+            # attach to active domain
+            dom = redhawk.attach(domain)
+
+        else:
             # kick start domain
-            if dev_mgr:
-                dom = redhawk.kickDomain(domain, device_managers=dev_mgr)
+            if dev_mgrs:
+                dom = redhawk.kickDomain(domain, device_managers=dev_mgrs)
             else:
+                # no device managers.. just launch domain
                 dom = redhawk.kickDomain(domain, kick_device_managers=False)
+
+            # allow delay x number of device managers to load
+            time.sleep(delay * len(dev_mgrs))
+
+        # -----------------------  check device managers  -------------------
+        if dev_mgrs:
+            # check if device managers have been loaded
+            for dev_mgr in dev_mgrs:
+                if dev_mgr not in dom.devMgrs:
+                    warnings.warn("Have not implemented setting up device"+\
+                        " managers on an active domain")
+
+
 
 def load_and_run_scenario(json_file, time_inc=1, wfm=""):
     """Load a scenario and run
-
-    .. warn:: Excess use of DEBUG can impact performance
 
     Parameters
     ----------
@@ -114,7 +138,7 @@ def load_and_run_scenario(json_file, time_inc=1, wfm=""):
     # extract from dictionary (verify keys exist)
     comp_specs = settings.get("components", {})
     wave_specs = settings.get("waveforms", {})
-    domain_specs = settings.get("domains", [])
+    domain_specs = settings.get("domains", {})
     conns = settings["connections"]
     simm = settings["simulation"]
     debug = settings.get("debug", {})
@@ -135,7 +159,6 @@ def load_and_run_scenario(json_file, time_inc=1, wfm=""):
     # -------------------------  setup connections  -------------------------
     for conn in conns:
         try:
-
             obj_1 = get_instance(conn[0], comp_dict, wfm_dict)
             port_1 = obj_1.getPort(str(conn[1]))
             obj_2 = get_instance(conn[2], comp_dict, wfm_dict)
@@ -147,16 +170,9 @@ def load_and_run_scenario(json_file, time_inc=1, wfm=""):
             print("Error running connection %s"%str(conn))
             raise
     # ---------------------------  setup debug  ---------------------------
-    try:
-        throughput_ports = {}
-        for tmp_port in debug.get("throughput", []):
-            tmp_c = str(tmp_port[0]) # convert from unicode
-            tmp_p = str(tmp_port[1]) # conver from unicode
-            tmp_name = tmp_c + "_" + tmp_p
-            throughput_ports[tmp_name] = comp_dict[tmp_c].getPort(tmp_p)
-    except Exception as e:
-        print("Exception caught %s"%str(e))
-        throughput_ports = {}
+    throughput_ports = throughput_helper.setup_throughput(
+        debug.get("throughput", []),
+        comp_dict=comp_dict, wfm_dict=wfm_dict)
 
     # --------------------------  save waveform  ----------------------------
     if wfm:
@@ -178,7 +194,7 @@ def load_and_run_scenario(json_file, time_inc=1, wfm=""):
             message_helper.show_messages(msg_sinks, msg_store)
 
             # show port throughput statistics
-            show_throughput(throughput_ports)
+            throughput_helper.show_throughput(throughput_ports)
 
             # sleep a little
             time.sleep(time_inc)
@@ -202,32 +218,7 @@ def load_and_run_scenario(json_file, time_inc=1, wfm=""):
 
     # TODO: release components/waveforms/devices/domains
     waveform_helper.release_waveforms(wfm_dict)
-
-def get_instance(unique_id, comp_dict, wfm_dict):
-    if unique_id in comp_dict:
-        return comp_dict[unique_id]
-    elif unique_id in wfm_dict:
-        return wfm_dict[unique_id]
-    else:
-        return None
-
-def show_throughput(ports):
-    """Display throughput at specified ports
-
-    Parameters
-    ----------
-    ports : dict
-        Each key should be descriptive of the component/port
-        Each value will be an instance of a uses port.
-    """
-    # TODO: improve the layout
-    for key in ports:
-        try:
-            # NOTE: the 0th statistics is for the first connection
-            print("%s: elements per second = %3.4f"%\
-                (key, ports[key].statistics[0].statistics.elementsPerSecond))
-        except Exception as e:
-            print(e)
+    throughput_helper.close(throughput_ports)
 
 if __name__ == "__main__":
     # ------------------------  parse input arguments  ----------------------

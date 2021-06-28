@@ -41,6 +41,9 @@ def stop_in_order(my_comps):
 def launch_components(sb, comp_specs):
     """Launch the components in the specs
 
+    .. warning::Log to file seems to work for rh.fileReader, but
+        fails on custom made component.
+
     Parameters
     ----------
     sb : module
@@ -66,8 +69,19 @@ def launch_components(sb, comp_specs):
     for comp in comp_specs:
         c_comp = comp_specs[comp]
         i_name = str(comp)
+
+        # check for log entry
+        log_entry = c_comp.get("log", {})
+        log_file = log_entry.get("out_file", None)
+        if log_file:
+            # default to append
+            access = log_entry.get("access", "a")
+            assert access in ["a", "w"], "Access should be in {'a','w'}"
+            log_file = open(log_file, access)
+
         # launch component
-        comp_dict[comp] = sb.launch(c_comp["key"], instanceName=i_name)
+        comp_dict[comp] = sb.launch(c_comp["key"], instanceName=i_name,
+            stdout=log_file)
 
         # -------------------------  configure  -----------------------------
         # FIXME : potentially may want to control the order of this.
@@ -76,11 +90,12 @@ def launch_components(sb, comp_specs):
         comp_dict[comp].configure(new_dict)
 
         # ------------------ if log level specified, update  ----------------
-        log_lvl = c_comp.get("log")
+        if log_entry:
+            log_lvl = log_entry.get("level")
 
-        if log_lvl:
-            #comp_dict[comp].log.setLevel(log_lvl)
-            comp_dict[comp].setLogLevel(i_name, log_lvl)
+            if log_lvl:
+                #comp_dict[comp].log.setLevel(log_lvl)
+                comp_dict[comp].setLogLevel(i_name, log_lvl)
 
     return comp_dict
 

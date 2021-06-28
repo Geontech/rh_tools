@@ -25,6 +25,14 @@ scene Package
     :undoc-members:
     :show-inheritance:
 
+:mod:`throughput_helper` Module
+-------------------------------
+
+.. automodule:: rh_tools.scene.throughput_helper
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 :mod:`utils` Module
 -------------------
 

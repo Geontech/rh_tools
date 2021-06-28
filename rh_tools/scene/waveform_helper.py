@@ -49,10 +49,15 @@ def launch_waveform(wfm_name, wfm_config, domain=None, devices=[]):
 
     devices : list
         Devices to launch.
+
     Returns
     -------
     wfm_inst : ossie.utils.redhawk.core.App
         The waveform instance
+
+    wfm_unique_id : str
+        The unique id assigned to this waveform instance
+
     Raises
     ------
     ApplicationInstallationError Invalid name or waveform not installed
@@ -71,22 +76,7 @@ def launch_waveform(wfm_name, wfm_config, domain=None, devices=[]):
         initConfiguration=wfm_config,
         deviceAssignment=[],
     )
-    return wfm_inst
-
-def configure_waveform(wfm_inst, wfm_config):
-    """Configure the waveform
-
-    This function can be used to configure the waveform after initial
-    launch.
-
-    Parameters
-    ----------
-    wfm_config : dict
-        The dictionary of key(parameter name) and value
-        (parameter setting)
-    """
-    for prop in wfm_config:
-        wfm_inst.__setattr(prop, wfm_config[prop])
+    return wfm_inst, unique_name
 
 def get_port(wfm_inst, port_name):
     """Get the port from the waveform described by the name
@@ -162,13 +152,17 @@ def launch_waveforms(wfm_specs):
     wfm_dict = OrderedDict()
 
     for wfm_id in wfm_specs:
-        wfm_inst = launch_waveform(
+        wfm_inst, wfm_uid = launch_waveform(
             wfm_name=wfm_specs[wfm_id]["key"],
             wfm_config=wfm_specs[wfm_id]["val"],
             domain=wfm_specs[wfm_id].get("domain", None),
             devices=wfm_specs[wfm_id].get("devices", [])
         )
         wfm_dict[wfm_id] = wfm_inst
+
+        log_specs = wfm_specs[wfm_id].get("log", {})
+        for key in log_specs:
+            wfm_inst.setLogLevel(key, log_specs[key])
 
     return wfm_dict
 
