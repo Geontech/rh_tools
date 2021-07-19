@@ -94,8 +94,14 @@ def launch_components(sb, comp_specs):
             log_lvl = log_entry.get("level")
 
             if log_lvl:
-                #comp_dict[comp].log.setLevel(log_lvl)
-                comp_dict[comp].setLogLevel(i_name, log_lvl)
+                # NOTE:
+                #   rh.FileSource needs to be specified with string ("WARN")
+                #   some components need to be specified with a number (40000)
+                if isinstance(log_lvl, long) or isinstance(log_lvl, int):
+                    #comp_dict[comp].ref.setLogLevel(i_name, log_lvl)
+                    comp_dict[comp].ref.log_level = log_lvl
+                else:
+                    comp_dict[comp].setLogLevel(i_name, log_lvl)
 
     return comp_dict
 

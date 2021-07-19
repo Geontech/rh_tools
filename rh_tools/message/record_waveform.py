@@ -21,6 +21,8 @@ Example JSON file.  This module is only looking for message out ports.
 >>>     ]
 >>> }
 """
+import bulkio
+from ossie import properties
 from ossie.utils import redhawk, sb
 from rh_tools.domain.domain_tools import find_waveform
 import uuid
@@ -30,6 +32,55 @@ if sys.version_info.major == 2:
     prompt = raw_input
 else:
     prompt = input
+
+class MessageRecorder(object):
+    def __init__(self, name="received"):
+        self.name = name
+        self._msg_queue = []
+        self._num_messages = 0
+
+    def msgCallback(self, id, msg):
+        """The callback method for the message sink
+
+        This instance of the message callback adds the received timestamp
+        into the message structure.
+
+        Parameters
+        ----------
+        id : str
+            The message id
+
+        msg : Message
+            The received Message structure
+        """
+        # convert the corba object into a Python dictionary
+        prop = properties.prop_to_dict(msg)
+
+        # ---------  update message to store the current timestamp  ---------
+        c_now = bulkio.timestamp.now()
+
+        prop[id]["%s::%s_twsec"%(id, self.name)] = c_now.twsec
+        prop[id]["%s::%s_tfsec"%(id, self.name)] = c_now.tfsec
+
+        # -------------------------  store in queue  ------------------------
+        self._msg_queue.append(prop)
+        self._num_messages += 1
+
+    def getMessages(self):
+        """Get the received messages
+
+        Returns
+        -------
+        msgs : list
+            The list of messages received since the last call
+        """
+        # temporary store message queue
+        msgs = self._msg_queue
+
+        # reset the queue
+        self._num_messages = 0
+        self._msg_queue = []
+        return msgs
 
 def listen_waveform_ports(domain, waveform_ports):
     """Listen to message events on specific waveform ports on domain
@@ -55,6 +106,7 @@ def listen_waveform_ports(domain, waveform_ports):
     # ------------------------  prepare variables  --------------------------
     my_msg_sinks = {}
     my_msgs = {}
+    my_msg_recorder = {}
     waveform_ports_connected = 0
     print_decimation = 0
     PRINT_EVERY_NTH_LOOP = 20
@@ -83,7 +135,11 @@ def listen_waveform_ports(domain, waveform_ports):
                     port_inst = c_wave.getPort(c_port)
 
                     # ---------------  connect to message sink  ---------------------
-                    msg_sink = sb.MessageSink(storeMessages=True)
+                    msg_record = MessageRecorder()
+                    msg_sink = sb.MessageSink(
+                        messageCallback=msg_record.msgCallback,
+                        storeMessages=True
+                    )
                     port_inst.connectPort(\
                         msg_sink.getPort("msgIn"),
                         "conn_"+ str(uuid.uuid1()))
@@ -91,6 +147,7 @@ def listen_waveform_ports(domain, waveform_ports):
 
                     # track sink
                     my_msg_sinks[waveform_port_key] = msg_sink
+                    my_msg_recorder[waveform_port_key] = msg_record
                     print("Connected Waveform Name = {}, Port Name = {}".format(str(c_name), str(c_port)))
                     waveform_ports_connected = waveform_ports_connected + 1
                 except:
@@ -107,7 +164,9 @@ def listen_waveform_ports(domain, waveform_ports):
 
     # --------------------------  get messages  -----------------------------
     for key in my_msg_sinks.keys():
-        my_msgs[key] = my_msg_sinks[key].getMessages()
+        #my_msgs[key] = my_msg_sinks[key].getMessages()
+        # NOTE: use message recorder to update timestamps
+        my_msgs[key] = my_msg_recorder[key].getMessages()
         try:
             my_msg_sinks[key].releaseObject()
         except Exception as e:
