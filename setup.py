@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 from setuptools import setup, find_packages
 name = "Redhawk Tools"
-version = "0.4.002"
+version = "0.4.003"
 release = "0.4"
 author = "Keith Chow"
 

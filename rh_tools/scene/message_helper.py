@@ -175,8 +175,8 @@ if __name__ == "__main__":
     parser.add_argument("file", help="File to load from")
     parser.add_argument("--format", default="json",
         help="Format from {'json', 'pickle'")
-    parser.add_argument("out", default="/tmp/output.csv",
-        help="Output csv")
+    parser.add_argument("outdir", default="/tmp",
+        help="Output directory")
     parser.add_argument("--keep_msg_name", action="store_true")
     args = parser.parse_args()
 
@@ -187,9 +187,37 @@ if __name__ == "__main__":
         my_list = pickle.load(open(args.file, "r"))
     else:
         raise RuntimeError("Unexpected format %s"%str(args.format))
+
+    import os
+    base_name = os.path.basename(args.file)
+    ext_ind = base_name.rfind(".")
+
+    # create the base file name for output, matching the input json/pickle file
+    file_out = args.outdir + '/' + base_name[:ext_ind]
+
     try:
         rm_msg = not args.keep_msg_name
-        messages_to_csv(my_list, args.out, remove_msg_name=rm_msg)
+        if isinstance(my_list, list):
+            # --------  operate on a list of messages (list of dict)  -------
+            # NOTE: Running rh_tools.scene.run_custom with the debug option
+            #       for messages saves files as a list of message dictionaries
+            messages_to_csv(my_list,
+                output_csv_file=file_out+".csv",
+                remove_msg_name=rm_msg)
+
+        elif isinstance(my_list, dict):
+            # NOTE: rh_tools.message.record_waveform saves a dictionary
+            #       The keys are the waveform/port name.  Each of these
+            #       stores the list of messages received.
+            for key in my_list:
+                out_file = args.outdir + "/" + key
+                tmp_msg_list = my_list[key]
+
+                # save each list of message to separate file
+                messages_to_csv(tmp_msg_list,
+                    output_csv_file=file_out+"_%s.csv"%key,
+                    remove_msg_name=rm_msg)
+
     except RuntimeError as e:
         print("Failed to process %s"%str(args.file))
         print(e)
